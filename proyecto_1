@@ -1,0 +1,24 @@
+#! /bin/bash
+
+# Crear tabla Catalog
+psql -d fdd2db -c "create table if not exists catalog (bookshelf_id serial primary key, title varchar(70), url varchar(50))"
+
+
+curl https://www.gutenberg.org/ebooks/bookshelf/ | sed -nE '/.*bookshelf_pages.*/,/.*content ending.*/{/.*li.*/p}' |
+sed "s/'/''/g"  | awk -F '\"' '{printf "insert into Catalog values(%d,\x27%s\x27, \x27https://www.gutenberg.org%s\x27);\n", NR,$4, $2}' | psql -d fdd2db
+
+# Crear table book
+
+psql -d fdd2db -c "create table if not exists book (book_id serial primary key, bookshelf_id integer references catalog(bookshelf_id), title varchar(300), author varchar(300), url varchar(100), downloads integer)"
+
+# Arreglo de bookshelf
+id_book=1
+psql -d fdd2db -c "select url from catalog" | grep '^ https:' | while read line
+do
+id_bookshelf=$(psql -d fdd2db -c "select bookshelf_id from catalog where url='$line'" | awk '/-+/ {getline; print $0}')
+
+#curl $line | sed -nE '/<li class="booklink">/,/<li class="statusline">/p' | awk '/.*<span class="title">.*/ {title=$0;getline;subtitle=$0;getline;print title "," subtitle "," $0} /.*<a class="link".*/ {print $0}' | sed 's/^<a class="link" href="\(.*\)" accesskey=".*">/\1/' | awk -F '<span class="title">|<span class="subtitle">|<span class="extra">|</span>' '/<span.*/ {print $2 "<" $4 "<" $6} /.*ebooks.*/ {print "https://www.gutenberg.org"$0}' | sed "s/'/''/g" | awk '{a=$0;getline;print a "<" $0}' | sed 's/downloads//' | awk  -F '<' -v shelf="$id_bookshelf" -v book="$id_book" '{printf "insert into book values(%d,%d,\x27%s\x27, \x27%s\x27, \x27%s\x27, %d);\n", book, shelf, $2, $3, $1, $4; book++}' > query.txt
+curl $line | sed -nE '/<li class="booklink">/,/<li class="statusline">/p' | awk '/<span class="title">/ {print $0} /<span class="subtitle">/{print $0} /<span class="extra">/ {print $0} /.*<a class="link".*/ {print $0}' | sed 's/^<a class="link" href="\(.*\)" accesskey=".*">/\1/' | awk '{gsub("<\/span>", ""); print}' | sed 's/downloads/\n-------/' | awk 'BEGIN {ORS=""}; {print $0}' | sed 's/-------/\n/g' | sed 's/<span/ </g' | awk -F '<' '{if (!/.*class="subtitle">.*/) {print $1 "<" $2 "<" "class=\"subtitle\">NA<"  $3} else {print $0} }' | awk '{print "https://www.gutenberg.org"$0}' | awk '{gsub("class=\"title\">", ""); print}' | awk '{gsub("class=\"subtitle\">",""); print}' | awk '{gsub("class=\"extra\">","");print}' | sed "s/'/''/g" | awk  -F '<' -v shelf="$id_bookshelf" -v book="$id_b" '{printf "insert into book values(%d,%d,\x27%s\x27, \x27%s\x27, \x27%s\x27, %d);\n", book, shelf, $2, $3, $1, $4; book++}' > query.txt
+#psql -d fdd2db -f query.txt
+id_book=$(wc -l query.txt | grep -Eo '[0-9]+' | awk -v book="$id_book" '{print book + $0}')
+done

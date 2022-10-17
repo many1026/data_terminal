@@ -1,0 +1,4 @@
+#! /bin/bash
+
+curl https://www.gutenberg.org/ebooks/bookshelf/6 | sed -nE '/<li class="booklink">/,/<li class="statusline">/p' | awk '/<span class="title">/ {print $0} /<span class="subtitle">/{print $0} /<span class="extra">/ {print $0} /.*<a class="link".*/ {print $0}' | sed 's/^<a class="link" href="\(.*\)" accesskey=".*">/\1/' | awk '{gsub("<\/span>", ""); print}' | sed 's/downloads/\n-------/'| awk 'BEGIN {ORS=""}; {print $0}' | sed 's/-------/\n/g' | sed 's/<span/ </g' | awk -F '<' '{if (!/.*class="subtitle">.*/) {print $1 "<" $2 "< " "class=\"subtitle\">NA <"  $3} else {print $0} }' | awk '{print "https://www.gutenberg.org"$0}' | awk '{gsub("class=\"title\">", ""); print}' | awk '{gsub("class=\"subtitle\">",""); print}' | awk '{gsub("class=\"extra\">","");print}' | sed "s/'/''/g" > query
+
